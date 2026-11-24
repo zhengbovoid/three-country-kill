@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#8E1E1A" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="三国杀助手" />
+  <meta name="description" content="三国杀面杀便携速查：42位经典武将技能、全卡牌结算要点、身份配置、争议FAQ与座位距离计算器。" />
+  <meta property="og:title" content="三国杀助手 · 武将与规则速查" />
+  <meta property="og:description" content="打开即用的三国杀桌游速查手册：搜武将、查卡牌、解争议、算距离。" />
+  <title>三国杀助手 · 武将与规则速查</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
+  <link rel="apple-touch-icon" href="./icons/icon.svg" />
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-top">
+        <div class="brand">
+          <span class="brand-seal" aria-hidden="true">杀</span>
+          <div class="brand-text">
+            <h1>三国杀助手</h1>
+            <p id="header-subtitle">武将技能 · 卡牌效果 · 结算速查</p>
+          </div>
+        </div>
+        <button id="share-app-btn" class="icon-btn" type="button" aria-label="复制分享链接" title="复制分享链接">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+          <span>分享</span>
+        </button>
+      </div>
+
+      <!-- Search Bar -->
+      <div id="search-wrap" class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input
+          id="search-input"
+          type="search"
+          autocomplete="off"
+          placeholder="搜武将、首字母(zgl)、技能名或关键词…"
+          aria-label="搜索"
+        />
+        <button id="clear-search-btn" class="clear-btn hidden" type="button" aria-label="清除搜索">✕</button>
+      </div>
+
+      <!-- Contextual Filter Chips -->
+      <div id="filter-bar" class="filter-bar" role="tablist" aria-label="筛选分类"></div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content" class="main-content">
+      <div id="result-meta" class="result-meta"></div>
+      <section id="content-area" class="content-area" aria-live="polite"></section>
+    </main>
+
+    <!-- Bottom Tab Navigation -->
+    <nav class="bottom-nav" aria-label="主导航">
+      <button class="nav-item active" data-tab="heroes" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"></path>
+        </svg>
+        <span>武将</span>
+      </button>
+      <button class="nav-item" data-tab="recommend" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        </svg>
+        <span>选将推荐</span>
+      </button>
+      <button class="nav-item" data-tab="cards" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="3" width="12" height="18" rx="2"></rect>
+          <path d="M16 6h2a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-9"></path>
+        </svg>
+        <span>卡牌</span>
+      </button>
+      <button class="nav-item" data-tab="rules" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+        <span>规则FAQ</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Detail Bottom Sheet Modal -->
+  <div id="detail-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-sheet">
+      <div class="sheet-handle-bar"><span class="sheet-handle"></span></div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toast Feedback -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="./js/data-heroes.js"></script>
+  <script src="./js/data-cards.js"></script>
+  <script src="./js/data-rules.js"></script>
+  <script src="./js/recommender.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

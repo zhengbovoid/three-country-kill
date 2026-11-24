@@ -1,0 +1,19 @@
+{
+  "name": "三国杀助手 · 武将与规则速查",
+  "short_name": "三国杀助手",
+  "description": "三国杀面杀便携速查：武将技能、卡牌效果、结算FAQ与距离计算器",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F7F3EB",
+  "theme_color": "#8E1E1A",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
