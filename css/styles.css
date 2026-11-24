@@ -20,6 +20,10 @@
   --wu-bg: #e8f6ee;
   --qun: #7b6024;
   --qun-bg: #f6efdd;
+  --shen: #6d2e9b;
+  --shen-bg: #f3e9fb;
+  --jin: #433f91;
+  --jin-bg: #ecebfa;
 
   --pro-bg: #e9f6ee;
   --pro-text: #19693d;
@@ -304,6 +308,8 @@ body.modal-open {
 .faction-shu { background: var(--shu-bg); color: var(--shu); border: 1px solid rgba(184, 41, 37, 0.2); }
 .faction-wu { background: var(--wu-bg); color: var(--wu); border: 1px solid rgba(30, 122, 72, 0.2); }
 .faction-qun { background: var(--qun-bg); color: var(--qun); border: 1px solid rgba(123, 96, 36, 0.24); }
+.faction-shen { background: linear-gradient(135deg, #f6ebff 0%, #fbf2dd 100%); color: var(--shen); border: 1px solid rgba(184, 135, 50, 0.45); }
+.faction-jin { background: var(--jin-bg); color: var(--jin); border: 1px solid rgba(67, 63, 145, 0.25); }
 
 .hero-name-row {
   display: flex;
@@ -452,6 +458,44 @@ body.modal-open {
 .cat-weapon { background: #fceceb; color: #b82925; }
 .cat-armor { background: #e8f6ee; color: #1e7a48; }
 .cat-horse { background: #eef4e8; color: #4a6b1b; }
+.cat-treasure { background: #fbf2e3; color: #9a5b13; }
+
+.subfilter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.subfilter-select {
+  flex: 1;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 10px;
+}
+
+.load-more-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--crimson-dark);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+  box-shadow: var(--shadow-sm);
+}
+
+.load-more-btn:active {
+  background: var(--surface-alt);
+}
 
 .range-badge {
   font-size: 11.5px;

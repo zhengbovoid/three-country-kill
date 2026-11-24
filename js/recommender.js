@@ -136,6 +136,34 @@ window.SGS_RECOMMENDER = (function () {
     }
   };
 
+  const PACK_SCOPES = {
+    classic: {
+      label: '经典面杀（标+神话）',
+      packs: ['standard', 'shenhua']
+    },
+    popular: {
+      label: '主流扩展（标+神话+界+一将+谋+神）',
+      packs: ['standard', 'shenhua', 'extra', 'refresh', 'yijiang', 'newjiang', 'sb', 'shiji', 'yingbian']
+    },
+    all: {
+      label: '全部官方扩展（全库）',
+      packs: null
+    }
+  };
+
+  function resolveLordProfileKey(lordHero) {
+    if (!lordHero) return null;
+    if (LORD_PROFILES[lordHero.id]) return lordHero.id;
+    const n = lordHero.name || '';
+    if (n.includes('曹操') && !n.includes('神')) return 'caocao';
+    if (n.includes('刘备') && !n.includes('神')) return 'liubei';
+    if (n.includes('孙权') && !n.includes('神')) return 'sunquan';
+    if (n.includes('张角') && !n.includes('神')) return 'zhangjiao';
+    if (n.includes('孙策') && !n.includes('神')) return 'sunce';
+    if (n.includes('袁绍') && !n.includes('神')) return 'yuanshao';
+    return null;
+  }
+
   function getSeatContext(playerCount, seat, role) {
     if (role === 'lord') {
       return {
@@ -208,8 +236,9 @@ window.SGS_RECOMMENDER = (function () {
     }
 
     // 2. Lord-specific synergy / counter (when role is not lord)
-    if (role !== 'lord' && lordHeroId) {
-      const profile = LORD_PROFILES[lordHeroId];
+    if (role !== 'lord' && lordHero) {
+      const profileKey = resolveLordProfileKey(lordHero);
+      const profile = profileKey ? LORD_PROFILES[profileKey] : null;
       if (profile) {
         if (role === 'loyalist') {
           if (profile.lordSkillFaction && hero.faction === profile.lordSkillFaction) {
@@ -222,6 +251,18 @@ window.SGS_RECOMMENDER = (function () {
               (profile.loyalistNote && profile.loyalistNote[hero.id]) ||
                 `与${lordHero.name}主公体系高度契合`
             );
+          } else if (profileKey === 'caocao' && (hasTrait(hero, 'selfHurt') || hasTrait(hero, 'aoe'))) {
+            score += 6;
+            pros.push('卖血/AOE体系与曹操主公联动良好');
+          } else if (profileKey === 'yuanshao' && (hasTrait(hero, 'selfHurt') || hasTrait(hero, 'antiAoe') || hasTrait(hero, 'heal'))) {
+            score += 7;
+            pros.push('抗万箭/卖血或续航，适合配合袁绍主公');
+          } else if (profileKey === 'zhangjiao' && (hasTrait(hero, 'judge') || hasTrait(hero, 'heal'))) {
+            score += 7;
+            pros.push('改判/续航可有效支援张角主公');
+          } else if (profileKey === 'liubei' && (hasTrait(hero, 'earlyBurst') || hasTrait(hero, 'cardDraw'))) {
+            score += 6;
+            pros.push('吃牌转化能力强，适合接刘备仁德');
           }
         } else if (role === 'rebel') {
           if (profile.rebelBest.includes(hero.id)) {
@@ -230,6 +271,18 @@ window.SGS_RECOMMENDER = (function () {
               (profile.rebelNote && profile.rebelNote[hero.id]) ||
                 `有效克制${lordHero.name}主公体系`
             );
+          } else if (profileKey === 'caocao' && (hasTrait(hero, 'handDisrupt') || hasTrait(hero, 'directDmg') || hasTrait(hero, 'unblockable'))) {
+            score += 8;
+            pros.push('拆牌/直伤/强命可有效压制曹操奸雄');
+          } else if (profileKey === 'zhangjiao' && (hasTrait(hero, 'unblockable') || hasTrait(hero, 'directDmg') || hasTrait(hero, 'handDisrupt'))) {
+            score += 8;
+            pros.push('强命/直伤/拆手牌绕开张角出闪雷击');
+          } else if ((profileKey === 'sunquan' || profileKey === 'liubei') && (hasTrait(hero, 'handDisrupt') || hasTrait(hero, 'unblockable'))) {
+            score += 7;
+            pros.push(`控牌/强命有效压制${lordHero.name}手牌运营`);
+          } else if (profileKey === 'yuanshao' && (hasTrait(hero, 'antiAoe') || hasTrait(hero, 'selfHurt') || hasTrait(hero, 'defenseOffTurn'))) {
+            score += 8;
+            pros.push('防万箭/卖血反打，克制袁绍首轮乱击');
           }
           if (profile.rebelAvoid.includes(hero.id)) {
             score -= 16;
@@ -239,18 +292,22 @@ window.SGS_RECOMMENDER = (function () {
             );
           }
         } else if (role === 'renegade') {
-          if (lordHeroId === 'yuanshao' && (hasTrait(hero, 'antiAoe') || hasTrait(hero, 'defenseOffTurn'))) {
+          if (profileKey === 'yuanshao' && (hasTrait(hero, 'antiAoe') || hasTrait(hero, 'defenseOffTurn'))) {
             score += 9;
             pros.push('能扛住袁绍主公首轮乱击压血，稳健过渡');
           }
-          if (lordHeroId === 'yuanshao' && hero.hp <= 3 && !hasTrait(hero, 'defenseOffTurn') && !hasTrait(hero, 'antiAoe')) {
+          if (profileKey === 'yuanshao' && hero.hp <= 3 && !hasTrait(hero, 'defenseOffTurn') && !hasTrait(hero, 'antiAoe')) {
             score -= 10;
             warns.push('3血脆皮面对袁绍主公极易开局暴毙');
           }
         }
-      } else if (lordHero) {
-        // Generic trait-based synergy/counter for non-standard Lords
+      } else {
+        // Generic trait & faction Lord-skill synergy/counter for any expansion Lord
         if (role === 'loyalist') {
+          if (hasTrait(lordHero, 'lordSkill') && hero.faction === lordHero.faction) {
+            score += 8;
+            pros.push(`同势力配合${lordHero.name}主公技`);
+          }
           if (lordHero.hp <= 3 && (hasTrait(hero, 'heal') || hero.styles.includes('support'))) {
             score += 9;
             pros.push(`保护3血主公${lordHero.name}，提升续航容错`);
@@ -410,9 +467,13 @@ window.SGS_RECOMMENDER = (function () {
       : null;
 
     const hasCandidates = Array.isArray(config.candidateIds) && config.candidateIds.length > 0;
+    const scopeObj = PACK_SCOPES[config.packScope || 'popular'] || PACK_SCOPES.all;
+    const allowedPacks = scopeObj.packs;
+
     let pool = heroes.filter((h) => {
       if (config.role !== 'lord' && h.id === config.lordHeroId) return false;
       if (hasCandidates) return config.candidateIds.includes(h.id);
+      if (allowedPacks && !allowedPacks.includes(h.packId)) return false;
       return true;
     });
 
@@ -424,7 +485,8 @@ window.SGS_RECOMMENDER = (function () {
       seatContext: getSeatContext(config.playerCount, config.seat, config.role),
       lordHero,
       isCandidateMode: hasCandidates,
-      results: hasCandidates ? ranked : ranked.slice(0, 10)
+      poolSize: pool.length,
+      results: hasCandidates ? ranked : ranked.slice(0, 12)
     };
   }
 
@@ -432,6 +494,7 @@ window.SGS_RECOMMENDER = (function () {
     STYLE_LABELS,
     DIFFICULTY_LABELS,
     ROLE_LABELS,
+    PACK_SCOPES,
     getSeatContext,
     recommend
   };

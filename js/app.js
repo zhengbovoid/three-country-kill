@@ -4,8 +4,39 @@
   const RULES = window.SGS_RULES || {};
   const REC = window.SGS_RECOMMENDER;
 
-  const FACTION_LABEL = { wei: '魏', shu: '蜀', wu: '吴', qun: '群' };
-  const FLAGSHIP_LORDS = ['caocao', 'liubei', 'sunquan', 'zhangjiao', 'sunce', 'yuanshao'];
+  const FACTION_LABEL = { wei: '魏', shu: '蜀', wu: '吴', qun: '群', shen: '神', jin: '晋' };
+  const PAGE_SIZE = 40;
+
+  // Build ordered list of hero packs and card packs dynamically from loaded datasets
+  const HERO_PACKS = [];
+  const heroPackSeen = new Map();
+  HEROES.forEach((h) => {
+    const pid = h.packId || 'other';
+    if (!heroPackSeen.has(pid)) {
+      const entry = { id: pid, label: h.pack || pid, count: 0 };
+      heroPackSeen.set(pid, entry);
+      HERO_PACKS.push(entry);
+    }
+    heroPackSeen.get(pid).count++;
+  });
+
+  const CARD_PACKS = [];
+  const cardPackSeen = new Map();
+  CARDS.forEach((c) => {
+    const pid = c.packId || 'other';
+    if (!cardPackSeen.has(pid)) {
+      const entry = { id: pid, label: c.pack || pid, count: 0 };
+      cardPackSeen.set(pid, entry);
+      CARD_PACKS.push(entry);
+    }
+    cardPackSeen.get(pid).count++;
+  });
+
+  // Resolve quick flagship Lord buttons (including 界/谋 classics) from actual loaded HEROES
+  const FLAGSHIP_LORD_NAMES = ['曹操', '刘备', '孙权', '张角', '孙策', '袁绍', '界曹操', '界刘备', '界孙权', '曹丕'];
+  const FLAGSHIP_LORDS = FLAGSHIP_LORD_NAMES
+    .map((name) => HEROES.find((h) => h.name === name))
+    .filter(Boolean);
 
   const STORAGE_FAVS = 'sgs_favorites_v1';
   const STORAGE_REC = 'sgs_recommender_v1';
@@ -14,7 +45,10 @@
     tab: 'heroes',
     query: '',
     heroFilter: 'all',
+    heroPack: 'all',
+    heroVisible: PAGE_SIZE,
     cardFilter: 'all',
+    cardPack: 'all',
     ruleFilter: 'all',
     rulePlayerCount: 8,
     favorites: loadFavorites(),
@@ -27,6 +61,7 @@
       weaponRange: 1
     },
     rec: loadRecState(),
+    lordQuery: '',
     candidateQuery: ''
   };
 
@@ -69,6 +104,7 @@
       lordHeroId: 'caocao',
       playerCount: 8,
       seat: 2,
+      packScope: 'popular',
       styles: [],
       difficulty: 'any',
       candidateIds: []
@@ -133,8 +169,9 @@
   }
 
   function renderHpDots(hp) {
+    const dotCount = Math.min(5, Math.max(1, hp));
     let dots = '';
-    for (let i = 0; i < hp; i++) {
+    for (let i = 0; i < dotCount; i++) {
       dots += '<span class="hp-dot" aria-hidden="true"></span>';
     }
     return `<span class="hp-dots" aria-label="${hp}体力">${dots}<span class="hp-text">${hp}血</span></span>`;
@@ -163,10 +200,32 @@
     renderMain();
   }
 
+  // Smart hero search scoring (exact name > prefix > contains > pinyin > skill text)
+  function scoreHeroMatch(hero, q) {
+    if (!q) return 1;
+    const name = hero.name.toLowerCase();
+    if (name === q) return 100;
+    if (name.startsWith(q)) return 85;
+    if (name.includes(q)) return 75;
+    const py = (hero.pinyin || '').toLowerCase();
+    if (py.split(' ').includes(q)) return 70;
+    if (py.includes(q)) return 55;
+    const title = (hero.title || '').toLowerCase();
+    if (title.includes(q)) return 45;
+    const skillNames = hero.skills.map((s) => s.name.toLowerCase()).join(' ');
+    if (skillNames.includes(q)) return 40;
+    const meta = `${FACTION_LABEL[hero.faction] || ''} ${hero.pack || ''} ${hero.subpack || ''}`.toLowerCase();
+    if (meta.includes(q)) return 30;
+    const skillDesc = hero.skills.map((s) => s.desc.toLowerCase()).join(' ');
+    if (skillDesc.includes(q)) return 15;
+    return 0;
+  }
+
   // ==================== Header & Tabs ====================
   function switchTab(tab, updateHash = true) {
     state.tab = tab;
     state.query = '';
+    state.heroVisible = PAGE_SIZE;
     searchInput.value = '';
     clearSearchBtn.classList.add('hidden');
 
@@ -175,17 +234,17 @@
     });
 
     if (tab === 'heroes') {
-      headerSubtitle.textContent = `收录 ${HEROES.length} 位经典武将 · 搜技能与结算`;
-      searchInput.placeholder = '搜武将、首字母(zgl)、技能名或关键词…';
+      headerSubtitle.textContent = `收录 ${HEROES.length} 位官方武将 · 涵盖 ${HERO_PACKS.length} 大扩展包`;
+      searchInput.placeholder = '搜武将(界徐盛/谋黄忠)、首字母(zgl)、技能名…';
       searchWrap.classList.remove('hidden');
       filterBar.classList.remove('hidden');
     } else if (tab === 'recommend') {
-      headerSubtitle.textContent = '按主公 · 身份 · 座位 · 风格智能选将';
+      headerSubtitle.textContent = '按主公 · 身份 · 座位 · 扩展包智能选将';
       searchWrap.classList.add('hidden');
       filterBar.classList.add('hidden');
     } else if (tab === 'cards') {
-      headerSubtitle.textContent = `标准 / 军争 ${CARDS.length} 种卡牌与结算要点`;
-      searchInput.placeholder = '搜卡牌名、首字母(tslh)、效果或关键词…';
+      headerSubtitle.textContent = `标准 / 军争 / 应变 / 用间 / 国战等 ${CARDS.length} 种卡牌`;
+      searchInput.placeholder = '搜卡牌名(冰杀/洞烛/木牛)、首字母或效果…';
       searchWrap.classList.remove('hidden');
       filterBar.classList.remove('hidden');
     } else if (tab === 'rules') {
@@ -210,12 +269,14 @@
     if (state.tab === 'heroes') {
       current = state.heroFilter;
       chips = [
-        { id: 'all', label: `全部 (${HEROES.length})` },
+        { id: 'all', label: `全部` },
         { id: 'fav', label: `收藏 ★ (${state.favorites.length})` },
         { id: 'wei', label: '魏' },
         { id: 'shu', label: '蜀' },
         { id: 'wu', label: '吴' },
-        { id: 'qun', label: '群' }
+        { id: 'qun', label: '群' },
+        { id: 'shen', label: '神' },
+        { id: 'jin', label: '晋' }
       ];
     } else if (state.tab === 'cards') {
       current = state.cardFilter;
@@ -226,7 +287,8 @@
         { id: 'delay', label: '延时锦囊' },
         { id: 'weapon', label: '武器' },
         { id: 'armor', label: '防具' },
-        { id: 'horse', label: '坐骑' }
+        { id: 'horse', label: '坐骑' },
+        { id: 'treasure', label: '宝物' }
       ];
     } else if (state.tab === 'rules') {
       current = state.ruleFilter;
@@ -263,54 +325,77 @@
   }
 
   // ==================== Tab 1: Heroes ====================
-  function matchesHeroQuery(hero, q) {
-    if (!q) return true;
-    const skillText = hero.skills.map((s) => `${s.name} ${s.desc}`).join(' ');
-    const hay = `${hero.name} ${hero.title} ${hero.pinyin} ${FACTION_LABEL[hero.faction]} ${hero.pack} ${skillText}`.toLowerCase();
-    return hay.includes(q);
-  }
-
   function renderHeroesTab() {
     const q = state.query.trim().toLowerCase();
-    const list = HEROES.filter((h) => {
-      if (state.heroFilter === 'fav' && !state.favorites.includes(h.id)) return false;
-      if (['wei', 'shu', 'wu', 'qun'].includes(state.heroFilter) && h.faction !== state.heroFilter) return false;
-      return matchesHeroQuery(h, q);
-    });
+    const scored = [];
+    for (let i = 0; i < HEROES.length; i++) {
+      const h = HEROES[i];
+      if (state.heroFilter === 'fav' && !state.favorites.includes(h.id)) continue;
+      if (['wei', 'shu', 'wu', 'qun', 'shen', 'jin'].includes(state.heroFilter) && h.faction !== state.heroFilter) continue;
+      if (state.heroPack !== 'all' && h.packId !== state.heroPack) continue;
+      const sc = scoreHeroMatch(h, q);
+      if (sc > 0) scored.push({ hero: h, score: sc, idx: i });
+    }
+    if (q) {
+      scored.sort((a, b) => b.score - a.score || a.idx - b.idx);
+    }
 
-    resultMeta.innerHTML = `<span>共找到 ${list.length} 位武将</span><span>点击查看完整结算与FAQ</span>`;
+    const total = scored.length;
+    const shown = scored.slice(0, state.heroVisible);
+    const remaining = total - shown.length;
 
-    if (list.length === 0) {
-      contentArea.innerHTML = `<div class="empty-state">${
-        state.heroFilter === 'fav'
-          ? '还没有收藏武将，点击卡片右上角 ☆ 即可快速收藏本局常用武将。'
-          : '没有找到匹配的武将，试试输入汉字或拼音首字母（如 zgl、cc、lb）。'
-      }</div>`;
+    resultMeta.innerHTML = `<span>共匹配 ${total} 位武将</span><span>点击查看完整技能与详情</span>`;
+
+    const packSelectHtml = `
+      <div class="subfilter-row">
+        <select id="hero-pack-select" class="subfilter-select" aria-label="按扩展包筛选武将">
+          <option value="all" ${state.heroPack === 'all' ? 'selected' : ''}>全部扩展包（${HEROES.length} 位官方武将）</option>
+          ${HERO_PACKS.map(
+            (p) =>
+              `<option value="${p.id}" ${state.heroPack === p.id ? 'selected' : ''}>${esc(p.label)}（${p.count}位）</option>`
+          ).join('')}
+        </select>
+      </div>
+    `;
+
+    if (total === 0) {
+      contentArea.innerHTML =
+        packSelectHtml +
+        `<div class="empty-state">${
+          state.heroFilter === 'fav'
+            ? '还没有收藏武将，点击卡片右上角 ☆ 即可快速收藏本局常用武将。'
+            : '没有找到匹配的武将，试试切换扩展包为「全部」或搜汉字/拼音首字母。'
+        }</div>`;
       return;
     }
 
-    contentArea.innerHTML = list
-      .map((hero) => {
+    const cardsHtml = shown
+      .map(({ hero }) => {
         const isFav = state.favorites.includes(hero.id);
         const skillsHtml = hero.skills
+          .slice(0, 3)
           .map(
             (s) =>
               `<div class="skill-preview-line"><span class="skill-name-inline">【${esc(s.name)}】</span>${esc(s.desc)}</div>`
           )
           .join('');
+        const extraSkills =
+          hero.skills.length > 3
+            ? `<div class="skill-preview-line" style="color:var(--ink-muted);">… 还有 ${hero.skills.length - 3} 个技能，点击查看全部</div>`
+            : '';
         return `
           <article class="hero-card" data-hero-id="${hero.id}">
             <div class="hero-card-head">
               <div class="hero-id-group">
-                <div class="faction-badge faction-${hero.faction}">${FACTION_LABEL[hero.faction]}</div>
+                <div class="faction-badge faction-${hero.faction}">${FACTION_LABEL[hero.faction] || '群'}</div>
                 <div>
                   <div class="hero-name-row">
                     <span class="hero-name">${esc(hero.name)}</span>
-                    <span class="hero-title">${esc(hero.title)}</span>
+                    ${hero.title ? `<span class="hero-title">${esc(hero.title)}</span>` : ''}
                   </div>
                   <div class="hero-meta-row">
                     ${renderHpDots(hero.hp)}
-                    <span class="pack-pill">${esc(hero.pack)}</span>
+                    <span class="pack-pill">${esc(hero.subpack || hero.pack)}</span>
                     ${difficultyBadge(hero.difficulty)}
                   </div>
                 </div>
@@ -319,11 +404,18 @@
                 ${isFav ? '★' : '☆'}
               </button>
             </div>
-            <div class="hero-skills-preview">${skillsHtml}</div>
+            <div class="hero-skills-preview">${skillsHtml}${extraSkills}</div>
           </article>
         `;
       })
       .join('');
+
+    const loadMoreHtml =
+      remaining > 0
+        ? `<button id="load-more-heroes-btn" class="load-more-btn" type="button">加载更多武将（还有 ${remaining} 位）</button>`
+        : '';
+
+    contentArea.innerHTML = packSelectHtml + cardsHtml + loadMoreHtml;
   }
 
   // ==================== Tab 2: Smart Hero Recommender ====================
@@ -337,7 +429,7 @@
     }
 
     const seatCtx = REC.getSeatContext(r.playerCount, r.seat, r.role);
-    const otherLords = HEROES.filter((h) => !FLAGSHIP_LORDS.includes(h.id));
+    const currentLord = HEROES.find((h) => h.id === r.lordHeroId);
 
     let seatButtonsHtml = '';
     if (r.role === 'lord') {
@@ -356,23 +448,25 @@
       <div>
         <div class="rec-section-title">
           <span>2. 当前主公武将</span>
-          <span class="rec-hint">自动计算主公技配合与克制</span>
+          <span class="rec-hint">当前已选：${currentLord ? esc(currentLord.name) : '未指定'}</span>
         </div>
         <div class="chip-wrap" style="margin-bottom: 8px;">
-          ${FLAGSHIP_LORDS.map((id) => {
-            const lh = HEROES.find((h) => h.id === id);
-            return `<button class="opt-chip ${r.lordHeroId === id ? 'active' : ''}" data-rec-lord="${id}" type="button">${esc(lh.name)}</button>`;
-          }).join('')}
+          ${FLAGSHIP_LORDS.map(
+            (lh) =>
+              `<button class="opt-chip ${r.lordHeroId === lh.id ? 'active' : ''}" data-rec-lord="${lh.id}" type="button">${esc(lh.name)}</button>`
+          ).join('')}
         </div>
-        <select id="rec-lord-select" class="select-input" aria-label="选择其他主公武将">
-          <option value="">其他主公（从全部武将选择）…</option>
-          ${otherLords
-            .map(
-              (h) =>
-                `<option value="${h.id}" ${r.lordHeroId === h.id ? 'selected' : ''}>${esc(h.name)}（${FACTION_LABEL[h.faction]} · ${h.hp}血）</option>`
-            )
-            .join('')}
-        </select>
+        <div class="candidate-input-wrap">
+          <input
+            id="lord-search-input"
+            class="candidate-input"
+            type="text"
+            autocomplete="off"
+            value="${esc(state.lordQuery)}"
+            placeholder="或搜索任意主公武将（如 谋曹操、刘禅、董卓、神曹操…）"
+          />
+          <div id="lord-dropdown" class="candidate-dropdown hidden"></div>
+        </div>
       </div>
     `;
 
@@ -413,7 +507,22 @@
 
         <div>
           <div class="rec-section-title">
-            <span>${r.role === 'lord' ? '3.' : '4.'} 偏好打法风格（可多选）</span>
+            <span>${r.role === 'lord' ? '3.' : '4.'} 本局扩展包范围</span>
+            <span class="rec-hint">候选对比模式始终支持全库</span>
+          </div>
+          <div class="chip-wrap">
+            ${Object.entries(REC.PACK_SCOPES)
+              .map(
+                ([key, cfg]) =>
+                  `<button class="opt-chip ${(r.packScope || 'popular') === key ? 'active' : ''}" data-rec-scope="${key}" type="button">${esc(cfg.label)}</button>`
+              )
+              .join('')}
+          </div>
+        </div>
+
+        <div>
+          <div class="rec-section-title">
+            <span>${r.role === 'lord' ? '4.' : '5.'} 偏好打法风格（可多选）</span>
             ${r.styles.length > 0 ? '<button id="clear-styles-btn" class="text-link-btn" type="button">不限</button>' : '<span class="rec-hint">未选表示不限</span>'}
           </div>
           <div class="chip-wrap">
@@ -428,7 +537,7 @@
 
         <div>
           <div class="rec-section-title">
-            <span>${r.role === 'lord' ? '4.' : '5.'} 操作难度偏好</span>
+            <span>${r.role === 'lord' ? '5.' : '6.'} 操作难度偏好</span>
           </div>
           <div class="chip-wrap">
             ${[
@@ -448,7 +557,7 @@
         <div class="candidate-box">
           <div class="rec-section-title">
             <span>可选：对比我手头抽到的候选武将</span>
-            ${r.candidateIds.length > 0 ? '<button id="clear-candidates-btn" class="text-link-btn" type="button">清空候选</button>' : '<span class="rec-hint">不填则推荐全库Top10</span>'}
+            ${r.candidateIds.length > 0 ? '<button id="clear-candidates-btn" class="text-link-btn" type="button">清空候选</button>' : '<span class="rec-hint">可搜全部 1961 位武将</span>'}
           </div>
           <div class="candidate-input-wrap">
             <input
@@ -457,7 +566,7 @@
               type="text"
               autocomplete="off"
               value="${esc(state.candidateQuery)}"
-              placeholder="输入抽到的武将名或首字母（如 cc、zgl、hz）添加对比…"
+              placeholder="输入抽到的武将名或首字母（如 界徐盛、谋黄忠、zgl）…"
             />
             <div id="candidate-dropdown" class="candidate-dropdown hidden"></div>
           </div>
@@ -468,8 +577,41 @@
       <div id="rec-results-wrap" style="display:flex;flex-direction:column;gap:10px;"></div>
     `;
 
+    renderLordDropdown();
     renderCandidateSection();
     renderRecommendResults();
+  }
+
+  function renderLordDropdown() {
+    const dropdown = document.getElementById('lord-dropdown');
+    if (!dropdown) return;
+    const q = state.lordQuery.trim().toLowerCase();
+    if (!q) {
+      dropdown.classList.add('hidden');
+      dropdown.innerHTML = '';
+      return;
+    }
+    const matches = HEROES
+      .map((h) => ({ h, sc: scoreHeroMatch(h, q) }))
+      .filter((x) => x.sc >= 45)
+      .sort((a, b) => b.sc - a.sc)
+      .slice(0, 6);
+
+    dropdown.classList.remove('hidden');
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="candidate-option" style="color:var(--ink-muted);cursor:default;">未找到匹配主公武将</div>';
+      return;
+    }
+    dropdown.innerHTML = matches
+      .map(
+        ({ h }) => `
+        <button class="candidate-option" data-pick-lord="${h.id}" type="button">
+          <span><strong>${esc(h.name)}</strong> · ${FACTION_LABEL[h.faction] || '群'} · ${h.hp}血 · ${esc(h.pack)}</span>
+          <span style="color:var(--crimson);font-size:12px;font-weight:700;">设为主公</span>
+        </button>
+      `
+      )
+      .join('');
   }
 
   function renderCandidateSection() {
@@ -479,26 +621,30 @@
 
     const q = state.candidateQuery.trim().toLowerCase();
     if (q) {
-      const matches = HEROES.filter((h) => {
-        if (state.rec.role !== 'lord' && h.id === state.rec.lordHeroId) return false;
-        if (state.rec.candidateIds.includes(h.id)) return false;
-        return `${h.name} ${h.pinyin} ${h.title}`.toLowerCase().includes(q);
-      }).slice(0, 6);
+      const matches = HEROES
+        .filter((h) => {
+          if (state.rec.role !== 'lord' && h.id === state.rec.lordHeroId) return false;
+          if (state.rec.candidateIds.includes(h.id)) return false;
+          return true;
+        })
+        .map((h) => ({ h, sc: scoreHeroMatch(h, q) }))
+        .filter((x) => x.sc >= 45)
+        .sort((a, b) => b.sc - a.sc)
+        .slice(0, 6);
 
+      dropdown.classList.remove('hidden');
       if (matches.length > 0) {
-        dropdown.classList.remove('hidden');
         dropdown.innerHTML = matches
           .map(
-            (h) => `
+            ({ h }) => `
             <button class="candidate-option" data-add-candidate="${h.id}" type="button">
-              <span><strong>${esc(h.name)}</strong> · ${FACTION_LABEL[h.faction]} · ${h.hp}血</span>
+              <span><strong>${esc(h.name)}</strong> · ${FACTION_LABEL[h.faction] || '群'} · ${h.hp}血 · ${esc(h.pack)}</span>
               <span style="color:var(--crimson);font-size:12px;font-weight:700;">+ 加入对比</span>
             </button>
           `
           )
           .join('');
       } else {
-        dropdown.classList.remove('hidden');
         dropdown.innerHTML = `<div class="candidate-option" style="color:var(--ink-muted);cursor:default;">未找到可添加的武将</div>`;
       }
     } else {
@@ -512,7 +658,7 @@
         if (!h) return '';
         return `
           <span class="cand-chip">
-            ${esc(h.name)}
+            ${esc(h.name)}（${esc(h.pack)}）
             <button class="cand-remove" data-remove-candidate="${h.id}" type="button" aria-label="移除${esc(h.name)}">✕</button>
           </span>
         `;
@@ -527,7 +673,7 @@
     const output = REC.recommend(HEROES, state.rec);
     const titleText = output.isCandidateMode
       ? `你的候选武将推荐排序（${output.results.length}选1）`
-      : `当前局势推荐 Top ${output.results.length}`;
+      : `当前局势推荐 Top ${output.results.length}（池内 ${output.poolSize} 位）`;
 
     const cardsHtml = output.results
       .map((item, index) => {
@@ -544,7 +690,7 @@
             <div class="rec-card-top">
               <div class="rec-left">
                 <div class="rank-badge ${rankClass}">${rank === 1 ? '★' : rank}</div>
-                <div class="faction-badge faction-${h.faction}">${FACTION_LABEL[h.faction]}</div>
+                <div class="faction-badge faction-${h.faction}">${FACTION_LABEL[h.faction] || '群'}</div>
                 <div>
                   <div class="hero-name-row">
                     <span class="hero-name">${esc(h.name)}</span>
@@ -552,8 +698,8 @@
                   </div>
                   <div class="hero-meta-row">
                     ${renderHpDots(h.hp)}
+                    <span class="pack-pill">${esc(h.pack)}</span>
                     ${difficultyBadge(h.difficulty)}
-                    <span class="pack-pill">${h.styles.map((s) => REC.STYLE_LABELS[s]).slice(0, 2).join('·')}</span>
                   </div>
                 </div>
               </div>
@@ -582,21 +728,38 @@
     const q = state.query.trim().toLowerCase();
     const list = CARDS.filter((c) => {
       if (state.cardFilter !== 'all' && c.category !== state.cardFilter) return false;
+      if (state.cardPack !== 'all' && c.packId !== state.cardPack) return false;
       if (!q) return true;
-      const hay = `${c.name} ${c.pinyin} ${c.subtype} ${c.effect} ${(c.faq || []).join(' ')}`.toLowerCase();
+      const hay = `${c.name} ${c.pinyin || ''} ${c.subtype} ${c.pack} ${c.effect} ${(c.faq || []).join(' ')}`.toLowerCase();
       return hay.includes(q);
     });
 
-    resultMeta.innerHTML = `<span>共找到 ${list.length} 种卡牌</span><span>点击查看常见结算争议</span>`;
+    resultMeta.innerHTML = `<span>共找到 ${list.length} 种卡牌</span><span>点击查看完整效果与结算</span>`;
+
+    const packSelectHtml = `
+      <div class="subfilter-row">
+        <select id="card-pack-select" class="subfilter-select" aria-label="按扩展包筛选卡牌">
+          <option value="all" ${state.cardPack === 'all' ? 'selected' : ''}>全部官方牌堆（${CARDS.length} 种卡牌）</option>
+          ${CARD_PACKS.map(
+            (p) =>
+              `<option value="${p.id}" ${state.cardPack === p.id ? 'selected' : ''}>${esc(p.label)}（${p.count}种）</option>`
+          ).join('')}
+        </select>
+      </div>
+    `;
 
     if (list.length === 0) {
-      contentArea.innerHTML = '<div class="empty-state">没有找到匹配的卡牌，试试搜「铁索」、「藤甲」、「顺手」或首字母。</div>';
+      contentArea.innerHTML =
+        packSelectHtml +
+        '<div class="empty-state">没有找到匹配的卡牌，试试切换牌堆为「全部」或搜「冰杀」、「洞烛」、「木牛」、「明光铠」。</div>';
       return;
     }
 
-    contentArea.innerHTML = list
-      .map(
-        (card) => `
+    contentArea.innerHTML =
+      packSelectHtml +
+      list
+        .map(
+          (card) => `
         <article class="card-item" data-card-id="${card.id}">
           <div class="card-item-head">
             <div class="card-title-group">
@@ -608,8 +771,8 @@
           <p class="card-effect-preview">${esc(card.effect)}</p>
         </article>
       `
-      )
-      .join('');
+        )
+        .join('');
   }
 
   // ==================== Tab 4: Rules, Distance Calc & FAQ ====================
@@ -683,10 +846,6 @@
     if (showDist) {
       const c = state.calc;
       const dist = computeDistance();
-      let seatOpts = '';
-      for (let i = 1; i <= c.players; i++) {
-        seatOpts += `<option value="${i}">${i}号位</option>`;
-      }
       blocks.push(`
         <section class="rule-card">
           <h2>面杀距离与范围计算器</h2>
@@ -704,9 +863,9 @@
               <select id="calc-weapon" class="select-input">
                 ${[
                   { v: 1, l: '1（无武器 / 诸葛连弩）' },
-                  { v: 2, l: '2（青釭/雌雄/寒冰/古锭）' },
-                  { v: 3, l: '3（青龙/丈八/贯石斧）' },
-                  { v: 4, l: '4（方天画戟/朱雀羽扇）' },
+                  { v: 2, l: '2（青釭/雌雄/寒冰/古锭/倚天）' },
+                  { v: 3, l: '3（青龙/丈八/贯石斧/乌铁/三尖）' },
+                  { v: 4, l: '4（方天画戟/朱雀/五行鹤翎扇）' },
                   { v: 5, l: '5（麒麟弓）' }
                 ]
                   .map((w) => `<option value="${w.v}" ${c.weaponRange === w.v ? 'selected' : ''}>${w.l}</option>`)
@@ -825,18 +984,30 @@
       )
       .join('');
 
+    const faqSectionHtml =
+      hero.faq && hero.faq.length > 0
+        ? `
+      <div class="detail-section">
+        <h3>结算要点与 FAQ</h3>
+        <ul class="faq-bullets">
+          ${hero.faq.map((line) => `<li>${esc(line)}</li>`).join('')}
+        </ul>
+      </div>
+    `
+        : '';
+
     modalBody.innerHTML = `
       <div class="modal-header-row">
         <div class="hero-id-group">
-          <div class="faction-badge faction-${hero.faction}" style="width:42px;height:42px;font-size:20px;">${FACTION_LABEL[hero.faction]}</div>
+          <div class="faction-badge faction-${hero.faction}" style="width:42px;height:42px;font-size:20px;">${FACTION_LABEL[hero.faction] || '群'}</div>
           <div>
             <div class="hero-name-row">
               <span id="modal-title" class="hero-name" style="font-size:20px;">${esc(hero.name)}</span>
-              <span class="hero-title">${esc(hero.title)}</span>
+              ${hero.title ? `<span class="hero-title">${esc(hero.title)}</span>` : ''}
             </div>
             <div class="hero-meta-row">
               ${renderHpDots(hero.hp)}
-              <span class="pack-pill">${esc(hero.pack)}包</span>
+              <span class="pack-pill">${esc(hero.subpack || hero.pack)}</span>
               ${difficultyBadge(hero.difficulty)}
             </div>
           </div>
@@ -859,15 +1030,10 @@
         </div>
       </div>
 
-      <div class="detail-section">
-        <h3>结算要点与 FAQ</h3>
-        <ul class="faq-bullets">
-          ${(hero.faq || []).map((line) => `<li>${esc(line)}</li>`).join('')}
-        </ul>
-      </div>
+      ${faqSectionHtml}
 
       <div class="detail-section">
-        <h3>实战简评</h3>
+        <h3>打法定位</h3>
         <div class="note-box">${esc(hero.tips)}</div>
       </div>
 
@@ -888,6 +1054,18 @@
     const card = CARDS.find((c) => c.id === cardId);
     if (!card) return;
 
+    const faqHtml =
+      card.faq && card.faq.length > 0
+        ? `
+      <div class="detail-section">
+        <h3>常见结算疑问</h3>
+        <ul class="faq-bullets">
+          ${card.faq.map((line) => `<li>${esc(line)}</li>`).join('')}
+        </ul>
+      </div>
+    `
+        : '';
+
     modalBody.innerHTML = `
       <div class="modal-header-row">
         <div>
@@ -901,8 +1079,8 @@
       </div>
 
       <div class="detail-section">
-        <h3>使用时机</h3>
-        <div class="note-box">${esc(card.timing)}</div>
+        <h3>所属扩展 / 使用时机</h3>
+        <div class="note-box">${esc(card.pack)} · ${esc(card.timing)}</div>
       </div>
 
       <div class="detail-section">
@@ -912,12 +1090,7 @@
         </div>
       </div>
 
-      <div class="detail-section">
-        <h3>常见结算疑问</h3>
-        <ul class="faq-bullets">
-          ${(card.faq || []).map((line) => `<li>${esc(line)}</li>`).join('')}
-        </ul>
-      </div>
+      ${faqHtml}
 
       <div class="modal-actions">
         <button id="modal-share-btn" class="btn-primary" data-share-hash="#card=${card.id}" type="button">
@@ -950,12 +1123,14 @@
 
   searchInput.addEventListener('input', (e) => {
     state.query = e.target.value;
+    state.heroVisible = PAGE_SIZE;
     clearSearchBtn.classList.toggle('hidden', !state.query);
     renderMain();
   });
 
   clearSearchBtn.addEventListener('click', () => {
     state.query = '';
+    state.heroVisible = PAGE_SIZE;
     searchInput.value = '';
     clearSearchBtn.classList.add('hidden');
     renderMain();
@@ -966,9 +1141,14 @@
     const btn = e.target.closest('.filter-chip');
     if (!btn) return;
     const val = btn.dataset.filter;
-    if (state.tab === 'heroes') state.heroFilter = val;
-    else if (state.tab === 'cards') state.cardFilter = val;
-    else if (state.tab === 'rules') state.ruleFilter = val;
+    if (state.tab === 'heroes') {
+      state.heroFilter = val;
+      state.heroVisible = PAGE_SIZE;
+    } else if (state.tab === 'cards') {
+      state.cardFilter = val;
+    } else if (state.tab === 'rules') {
+      state.ruleFilter = val;
+    }
     renderFilterBar();
     renderMain();
   });
@@ -979,6 +1159,13 @@
   });
 
   contentArea.addEventListener('click', (e) => {
+    // Load more heroes pagination
+    if (e.target.id === 'load-more-heroes-btn') {
+      state.heroVisible += PAGE_SIZE;
+      renderHeroesTab();
+      return;
+    }
+
     // Star toggle on hero card
     const starBtn = e.target.closest('[data-star-hero]');
     if (starBtn) {
@@ -1037,6 +1224,18 @@
     if (lordBtn) {
       state.rec.lordHeroId = lordBtn.dataset.recLord;
       state.rec.candidateIds = state.rec.candidateIds.filter((id) => id !== state.rec.lordHeroId);
+      state.lordQuery = '';
+      saveRecState();
+      renderRecommendTab();
+      return;
+    }
+
+    // Recommender searched lord pick
+    const pickLord = e.target.closest('[data-pick-lord]');
+    if (pickLord) {
+      state.rec.lordHeroId = pickLord.dataset.pickLord;
+      state.rec.candidateIds = state.rec.candidateIds.filter((id) => id !== state.rec.lordHeroId);
+      state.lordQuery = '';
       saveRecState();
       renderRecommendTab();
       return;
@@ -1046,6 +1245,15 @@
     const seatBtn = e.target.closest('[data-rec-seat]');
     if (seatBtn) {
       state.rec.seat = Number(seatBtn.dataset.recSeat);
+      saveRecState();
+      renderRecommendTab();
+      return;
+    }
+
+    // Recommender pack scope
+    const scopeBtn = e.target.closest('[data-rec-scope]');
+    if (scopeBtn) {
+      state.rec.packScope = scopeBtn.dataset.recScope;
       saveRecState();
       renderRecommendTab();
       return;
@@ -1117,20 +1325,20 @@
 
   contentArea.addEventListener('change', (e) => {
     const id = e.target.id;
-    if (id === 'rec-players-select') {
+    if (id === 'hero-pack-select') {
+      state.heroPack = e.target.value;
+      state.heroVisible = PAGE_SIZE;
+      renderHeroesTab();
+    } else if (id === 'card-pack-select') {
+      state.cardPack = e.target.value;
+      renderCardsTab();
+    } else if (id === 'rec-players-select') {
       state.rec.playerCount = Number(e.target.value);
       if (state.rec.role !== 'lord' && state.rec.seat > state.rec.playerCount) {
         state.rec.seat = state.rec.playerCount;
       }
       saveRecState();
       renderRecommendTab();
-    } else if (id === 'rec-lord-select') {
-      if (e.target.value) {
-        state.rec.lordHeroId = e.target.value;
-        state.rec.candidateIds = state.rec.candidateIds.filter((x) => x !== state.rec.lordHeroId);
-        saveRecState();
-        renderRecommendTab();
-      }
     } else if (id === 'calc-players') {
       state.calc.players = Number(e.target.value);
       state.calc.mySeat = Math.min(state.calc.mySeat, state.calc.players);
@@ -1152,6 +1360,9 @@
     if (e.target.id === 'candidate-search-input') {
       state.candidateQuery = e.target.value;
       renderCandidateSection();
+    } else if (e.target.id === 'lord-search-input') {
+      state.lordQuery = e.target.value;
+      renderLordDropdown();
     }
   });
 
